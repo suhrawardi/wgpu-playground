@@ -191,18 +191,19 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let mut rng = rand::thread_rng();
     let w = rect.w() as i32;
     let h = rect.h() as i32;
+    let pixelsize: u8 = 8;
 
-    for i in (-w..w).step_by(4 as usize) {
-        for j in (-h..h).step_by(4 as usize) {
+    for i in (-w..w).step_by(pixelsize as usize) {
+        for j in (-h..h).step_by(pixelsize as usize) {
 
             let c = abs(model.noise_c.get([i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]));
             let s = abs(model.noise_s.get([i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]));
-            let size = (s * 3.0 + 1.0).round();
+            let size = (s * (pixelsize - 1) as f64 + 1.0).round();
             let d: u32 = rng.gen_range(0..size as u32);
             draw.ellipse()
                 .w(size as f32)
                 .x((i + d as i32) as f32)
-                .y((j +d as i32) as f32)
+                .y(j as f32)
                 .color(gray(c));
         }
     }
