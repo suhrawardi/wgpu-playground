@@ -1,10 +1,14 @@
+use nannou::noise::{NoiseFn, Perlin, Seedable};
 use nannou::prelude::*;
+use rand::distributions::{Distribution};
+use rand_distr::{LogNormal};
 use std::sync::{Arc, Mutex};
 
 struct Model {
     compute: Compute,
     oscillators: Arc<Mutex<Vec<f32>>>,
     threadpool: futures::executor::ThreadPool,
+    noise: Perlin,
 }
 
 struct Compute {
@@ -23,7 +27,7 @@ pub struct Uniforms {
     oscillator_count: u32,
 }
 
-const OSCILLATOR_COUNT: u32 = 128;
+const OSCILLATOR_COUNT: u32 = 256;
 
 fn main() {
     nannou::app(model).update(update).run();
@@ -50,8 +54,13 @@ fn model(app: &App) -> Model {
             | wgpu::BufferUsage::COPY_SRC,
     });
 
+    let noise = Perlin::new().set_seed(12);
+    let log_normal = LogNormal::new(2.0, 3.0).unwrap();
+    let x: f32 = log_normal.sample(&mut rand::thread_rng()) % 20.0;
+    let y: f32 = log_normal.sample(&mut rand::thread_rng()) % 20.0;
+
     // Create the buffer that will store time.
-    let uniforms = create_uniforms(app.time, app.mouse.x, app.mouse.y, window.rect());
+    let uniforms = create_uniforms(app.time, x + w as f32, y + h as f32, window.rect());
     let uniforms_bytes = uniforms_as_bytes(&uniforms);
     let usage = wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST;
     let uniform_buffer = device.create_buffer_with_data(uniforms_bytes, usage);
@@ -86,6 +95,7 @@ fn model(app: &App) -> Model {
         compute,
         oscillators,
         threadpool,
+        noise,
     }
 }
 
@@ -104,8 +114,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             | wgpu::BufferUsage::COPY_SRC,
     });
 
-    // An update for the uniform buffer with the current time.
-    let uniforms = create_uniforms(app.time, app.mouse.x, app.mouse.y, win_rect);
+    let log_normal = LogNormal::new(2.0, 3.0).unwrap();
+    let x: f32 = log_normal.sample(&mut rand::thread_rng()) % 5.0;
+    let y: f32 = log_normal.sample(&mut rand::thread_rng()) % 5.0;
+
+    let uniforms = create_uniforms(app.time, x + 375.0, y + 375.0, win_rect);
     let uniforms_size = std::mem::size_of::<Uniforms>() as wgpu::BufferAddress;
     let uniforms_bytes = uniforms_as_bytes(&uniforms);
     let usage = wgpu::BufferUsage::COPY_SRC;
@@ -162,23 +175,24 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
-    frame.clear(BLACK);
+    frame.clear(WHITE);
     let draw = app.draw();
     let window = app.window(frame.window_id()).unwrap();
     let rect = window.rect();
+
+    // let x = abs(model.noise.get([app.mouse.x as f64, app.mouse.y as f64])) as f32 * 10.0;
+    // let y = abs(model.noise.get([app.mouse.y as f64, app.mouse.x as f64])) as f32 * 10.0;
 
     if let Ok(oscillators) = model.oscillators.lock() {
         let w = rect.w() / OSCILLATOR_COUNT as f32;
         let h = rect.h() / OSCILLATOR_COUNT as f32;
         let half_w = w * 0.5;
         let half_h = h * 0.5;
-        for (i, &osc) in oscillators.iter().enumerate() {
+        for (i, &osci) in oscillators.iter().enumerate() {
             let x = half_w + map_range(i as u32, 0, OSCILLATOR_COUNT, rect.left(), rect.right());
-            draw.rect().w_h(w, rect.h()).x(x).color(gray(osc));
-            for (j, &osc) in oscillators.iter().enumerate() {
+            for (j, &oscj) in oscillators.iter().enumerate() {
                 let y = half_h + map_range(j as u32, 0, OSCILLATOR_COUNT, rect.left(), rect.right());
-                // let c = rgba(nabs1, nabs2, nabs3, nabs4);
-                draw.rect().w_h(rect.w(), h).y(y).color(gray(osc));
+                draw.rect().w_h(w, h).x(x).y(y).color(gray((osci + oscj) / 2.0));
             }
         }
     }
@@ -186,9 +200,9 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.to_frame(app, &frame).unwrap();
 }
 
-fn create_uniforms(time: f32, mouse_x: f32, mouse_y: f32, win_rect: geom::Rect) -> Uniforms {
+fn create_uniforms(time: f32, x: f32, y: f32, win_rect: geom::Rect) -> Uniforms {
     let freq = map_range(
-        mouse_x + mouse_y,
+        x + y,
         win_rect.left(),
         win_rect.right(),
         0.0,
