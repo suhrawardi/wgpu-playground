@@ -8,7 +8,9 @@ struct Model {
     compute: Compute,
     oscillators: Arc<Mutex<Vec<f32>>>,
     threadpool: futures::executor::ThreadPool,
-    noise: Perlin,
+    noise_c: Perlin,
+    noise_s: Perlin,
+    perlin_x: f64,
 }
 
 struct Compute {
@@ -27,7 +29,7 @@ pub struct Uniforms {
     oscillator_count: u32,
 }
 
-const OSCILLATOR_COUNT: u32 = 256;
+const OSCILLATOR_COUNT: u32 = 64;
 
 fn main() {
     nannou::app(model).update(update).run();
@@ -54,13 +56,15 @@ fn model(app: &App) -> Model {
             | wgpu::BufferUsage::COPY_SRC,
     });
 
-    let noise = Perlin::new().set_seed(12);
-    let log_normal = LogNormal::new(2.0, 3.0).unwrap();
-    let x: f32 = log_normal.sample(&mut rand::thread_rng()) % 20.0;
-    let y: f32 = log_normal.sample(&mut rand::thread_rng()) % 20.0;
+    let noise_c = Perlin::new().set_seed(3);
+    let noise_s = Perlin::new().set_seed(4);
+    let perlin_x = 0.0;
+    let log_normal = LogNormal::new(200.0, 30.0).unwrap();
+    let x: f32 = log_normal.sample(&mut rand::thread_rng());
+    let y: f32 = log_normal.sample(&mut rand::thread_rng());
 
     // Create the buffer that will store time.
-    let uniforms = create_uniforms(app.time, x + w as f32, y + h as f32, window.rect());
+    let uniforms = create_uniforms(app.time, x, y, window.rect());
     let uniforms_bytes = uniforms_as_bytes(&uniforms);
     let usage = wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST;
     let uniform_buffer = device.create_buffer_with_data(uniforms_bytes, usage);
@@ -95,7 +99,9 @@ fn model(app: &App) -> Model {
         compute,
         oscillators,
         threadpool,
-        noise,
+        noise_c,
+        noise_s,
+        perlin_x,
     }
 }
 
@@ -104,6 +110,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let device = window.swap_chain_device();
     let win_rect = window.rect();
     let compute = &mut model.compute;
+
+    model.perlin_x = model.perlin_x + 1.0;
 
     // The buffer into which we'll read some data.
     let read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -114,11 +122,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             | wgpu::BufferUsage::COPY_SRC,
     });
 
-    let log_normal = LogNormal::new(2.0, 3.0).unwrap();
-    let x: f32 = log_normal.sample(&mut rand::thread_rng()) % 5.0;
-    let y: f32 = log_normal.sample(&mut rand::thread_rng()) % 5.0;
+    let log_normal = LogNormal::new(200.0, 30.0).unwrap();
+    let x: f32 = log_normal.sample(&mut rand::thread_rng());
+    let y: f32 = log_normal.sample(&mut rand::thread_rng());
 
-    let uniforms = create_uniforms(app.time, x + 375.0, y + 375.0, win_rect);
+    let uniforms = create_uniforms(app.time, x, y, win_rect);
     let uniforms_size = std::mem::size_of::<Uniforms>() as wgpu::BufferAddress;
     let uniforms_bytes = uniforms_as_bytes(&uniforms);
     let usage = wgpu::BufferUsage::COPY_SRC;
@@ -179,24 +187,19 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let draw = app.draw();
     let window = app.window(frame.window_id()).unwrap();
     let rect = window.rect();
+    let w = rect.w() as i32;
+    let h = rect.h() as i32;
 
-    // let x = abs(model.noise.get([app.mouse.x as f64, app.mouse.y as f64])) as f32 * 10.0;
-    // let y = abs(model.noise.get([app.mouse.y as f64, app.mouse.x as f64])) as f32 * 10.0;
-
-    if let Ok(oscillators) = model.oscillators.lock() {
-        let w = rect.w() / OSCILLATOR_COUNT as f32;
-        let h = rect.h() / OSCILLATOR_COUNT as f32;
-        let half_w = w * 0.5;
-        let half_h = h * 0.5;
-        for (i, &osci) in oscillators.iter().enumerate() {
-            let x = half_w + map_range(i as u32, 0, OSCILLATOR_COUNT, rect.left(), rect.right());
-            for (j, &oscj) in oscillators.iter().enumerate() {
-                let y = half_h + map_range(j as u32, 0, OSCILLATOR_COUNT, rect.left(), rect.right());
-                draw.rect().w_h(w, h).x(x).y(y).color(gray((osci + oscj) / 2.0));
-            }
+    for i in (-w..w).step_by(4 as usize) {
+        for j in (-h..h).step_by(4 as usize) {
+            let c = abs(model.noise_c.get([i as f64, j as f64, model.perlin_x]));
+            let s = abs(model.noise_s.get([i as f64 / 5.0, j as f64 / 5.0, model.perlin_x / 5.0]));
+            draw.ellipse()
+                .w((s * 3.0 + 1.0).round() as f32)
+                .x(i as f32).y(j as f32)
+                .color(gray(c));
         }
     }
-
     draw.to_frame(app, &frame).unwrap();
 }
 
