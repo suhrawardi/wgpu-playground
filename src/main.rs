@@ -30,7 +30,7 @@ pub struct Uniforms {
     oscillator_count: u32,
 }
 
-const OSCILLATOR_COUNT: u32 = 64;
+const OSCILLATOR_COUNT: u32 = 16;
 
 fn main() {
     nannou::app(model).update(update).run();
@@ -42,6 +42,13 @@ fn model(app: &App) -> Model {
     let w_id = app.new_window().size(w, h).view(view).build().unwrap();
     let window = app.window(w_id).unwrap();
     let device = window.swap_chain_device();
+
+    let noise_c = Perlin::new().set_seed(3);
+    let noise_s = Perlin::new().set_seed(4);
+    let perlin_x = 0.0;
+    let log_normal = LogNormal::new(200.0, 30.0).unwrap();
+    let x: f32 = log_normal.sample(&mut rand::thread_rng());
+    let y: f32 = log_normal.sample(&mut rand::thread_rng());
 
     // Create the compute shader module.
     let cs_mod = wgpu::shader_from_spirv_bytes(device, include_bytes!("shaders/comp.spv"));
@@ -57,15 +64,8 @@ fn model(app: &App) -> Model {
             | wgpu::BufferUsage::COPY_SRC,
     });
 
-    let noise_c = Perlin::new().set_seed(3);
-    let noise_s = Perlin::new().set_seed(4);
-    let perlin_x = 0.0;
-    let log_normal = LogNormal::new(200.0, 30.0).unwrap();
-    let x: f32 = log_normal.sample(&mut rand::thread_rng());
-    let y: f32 = log_normal.sample(&mut rand::thread_rng());
-
     // Create the buffer that will store time.
-    let uniforms = create_uniforms(app.time, x, y, window.rect());
+    let uniforms = create_uniforms(app.time, app.mouse.x, app.mouse.y, window.rect());
     let uniforms_bytes = uniforms_as_bytes(&uniforms);
     let usage = wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST;
     let uniform_buffer = device.create_buffer_with_data(uniforms_bytes, usage);
@@ -114,6 +114,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     model.perlin_x = model.perlin_x + 1.0;
 
+    let log_normal = LogNormal::new(200.0, 30.0).unwrap();
+    let x: f32 = log_normal.sample(&mut rand::thread_rng());
+    let y: f32 = log_normal.sample(&mut rand::thread_rng());
+
     // The buffer into which we'll read some data.
     let read_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("read_oscillators"),
@@ -122,10 +126,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             | wgpu::BufferUsage::COPY_DST
             | wgpu::BufferUsage::COPY_SRC,
     });
-
-    let log_normal = LogNormal::new(200.0, 30.0).unwrap();
-    let x: f32 = log_normal.sample(&mut rand::thread_rng());
-    let y: f32 = log_normal.sample(&mut rand::thread_rng());
 
     let uniforms = create_uniforms(app.time, x, y, win_rect);
     let uniforms_size = std::mem::size_of::<Uniforms>() as wgpu::BufferAddress;
@@ -195,13 +195,14 @@ fn view(app: &App, model: &Model, frame: Frame) {
     for i in (-w..w).step_by(4 as usize) {
         for j in (-h..h).step_by(4 as usize) {
 
-            let c = abs(model.noise_c.get([i as f64, j as f64, model.perlin_x]));
-            let s = abs(model.noise_s.get([i as f64 / 5.0, j as f64 / 5.0, model.perlin_x / 5.0]));
+            let c = abs(model.noise_c.get([i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]));
+            let s = abs(model.noise_s.get([i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]));
             let size = (s * 3.0 + 1.0).round();
             let d: u32 = rng.gen_range(0..size as u32);
             draw.ellipse()
                 .w(size as f32)
-                .x((i + d as i32) as f32).y(j as f32)
+                .x((i + d as i32) as f32)
+                .y((j +d as i32) as f32)
                 .color(gray(c));
         }
     }
