@@ -2,6 +2,7 @@ use nannou::noise::{NoiseFn, Perlin, Seedable};
 use nannou::prelude::*;
 use rand::distributions::{Distribution};
 use rand_distr::{LogNormal};
+use rand::Rng;
 use std::sync::{Arc, Mutex};
 
 struct Model {
@@ -187,19 +188,24 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let draw = app.draw();
     let window = app.window(frame.window_id()).unwrap();
     let rect = window.rect();
+    let mut rng = rand::thread_rng();
     let w = rect.w() as i32;
     let h = rect.h() as i32;
 
     for i in (-w..w).step_by(4 as usize) {
         for j in (-h..h).step_by(4 as usize) {
+
             let c = abs(model.noise_c.get([i as f64, j as f64, model.perlin_x]));
             let s = abs(model.noise_s.get([i as f64 / 5.0, j as f64 / 5.0, model.perlin_x / 5.0]));
+            let size = (s * 3.0 + 1.0).round();
+            let d: u32 = rng.gen_range(0..size as u32);
             draw.ellipse()
-                .w((s * 3.0 + 1.0).round() as f32)
-                .x(i as f32).y(j as f32)
+                .w(size as f32)
+                .x((i + d as i32) as f32).y(j as f32)
                 .color(gray(c));
         }
     }
+
     draw.to_frame(app, &frame).unwrap();
 }
 
