@@ -30,7 +30,7 @@ pub struct Uniforms {
     oscillator_count: u32,
 }
 
-const OSCILLATOR_COUNT: u32 = 16;
+const OSCILLATOR_COUNT: u32 = 128;
 
 fn main() {
     nannou::app(model).update(update).run();
@@ -65,7 +65,7 @@ fn model(app: &App) -> Model {
     });
 
     // Create the buffer that will store time.
-    let uniforms = create_uniforms(app.time, app.mouse.x, app.mouse.y, window.rect());
+    let uniforms = create_uniforms(app.time, x, y, window.rect());
     let uniforms_bytes = uniforms_as_bytes(&uniforms);
     let usage = wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST;
     let uniform_buffer = device.create_buffer_with_data(uniforms_bytes, usage);
@@ -195,9 +195,16 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     for i in (-w..w).step_by(pixelsize as usize) {
         for j in (-h..h).step_by(pixelsize as usize) {
-
-            let c = abs(model.noise_c.get([i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]));
-            let s = abs(model.noise_s.get([i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]));
+            let c = abs(
+                model.noise_c.get(
+                    [i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]
+                )
+            );
+            let s = abs(
+                model.noise_s.get(
+                    [i as f64 / 10.0, j as f64 / 10.0, model.perlin_x / 10.0]
+                )
+            );
             let size = (s * (pixelsize - 1) as f64 + 1.0).round();
             let d: u32 = rng.gen_range(0..size as u32);
             draw.ellipse()
